@@ -1,0 +1,99 @@
+parameters:
+  - name: 'Job_Name'
+    default: 'Automation test'
+    type: string
+
+  - name: 'Test_Suite'
+    type: string
+
+jobs:
+  - job:
+    displayName: ${{ parameters.Job_Name }}
+    steps:
+      - task: replacetokens@3
+        inputs:
+          rootDirectory: 'QA_Automation/Config/'
+          targetFiles: 'Config.properties'
+          encoding: 'auto'
+          writeBOM: true
+          actionOnMissing: 'warn'
+          keepToken: false
+          actionOnNoFiles: 'continue'
+          enableTransforms: false
+          tokenPrefix: '{{'
+          tokenSuffix: '}}'
+          enableRecursion: false
+          useLegacyPattern: false
+          enableTelemetry: true
+
+      - task: PowerShell@2
+        displayName: Download Chrome
+        inputs:
+          targetType: 'inline'
+          workingDirectory: 'QA_Automation/Drivers'
+          script: 'Invoke-WebRequest -Uri "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/116.0.5845.96/win64/chrome-win64.zip" -OutFile "chrome-win64.zip"'
+
+      - task: PowerShell@2
+        displayName: Download Chrome Driver
+        inputs:
+          targetType: 'inline'
+          workingDirectory: 'QA_Automation/Drivers'
+          script: 'Invoke-WebRequest -Uri "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/116.0.5845.96/win64/chromedriver-win64.zip" -OutFile "chromedriver-win64.zip"'
+
+      - task: PowerShell@2
+        displayName: List Files
+        inputs:
+          targetType: 'inline'
+          workingDirectory: 'QA_Automation/Drivers'
+          script: 'ls'
+
+      - task: ExtractFiles@1
+        displayName: Extract Chrome
+        inputs:
+          archiveFilePatterns: 'QA_Automation/Drivers/chrome-win64.zip'
+          destinationFolder: 'QA_Automation/Drivers'
+          cleanDestinationFolder: false
+          overwriteExistingFiles: true
+
+      - task: PowerShell@2
+        displayName: List Files
+        inputs:
+          targetType: 'inline'
+          workingDirectory: 'QA_Automation/Drivers'
+          script: 'ls'
+
+      - task: ExtractFiles@1
+        displayName: Extract Chrome Driver
+        inputs:
+          archiveFilePatterns: 'QA_Automation/Drivers/chromedriver-win64.zip'
+          destinationFolder: 'QA_Automation/Drivers'
+          cleanDestinationFolder: false
+          overwriteExistingFiles: true
+
+      - task: PowerShell@2
+        displayName: List Files
+        inputs:
+          targetType: 'inline'
+          workingDirectory: 'QA_Automation/Drivers'
+          script: 'ls'
+
+      - task: Maven@4
+        displayName: '${{ parameters.Job_Name }} Automation Tests'
+        retryCountOnTaskFailure: 3
+        inputs:
+          mavenPomFile: 'QA_Automation/pom.xml'
+          goals: 'install -Dbrowser=Chrome -DurlToBeTested=$(UI_URL) -Dtestng.xml=${{ parameters.Test_Suite }}'
+          publishJUnitResults: false
+          javaHomeOption: 'JDKVersion'
+          mavenVersionOption: 'Default'
+          mavenAuthenticateFeed: false
+          effectivePomSkip: false
+          sonarQubeRunAnalysis: false
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publishing Automation Reports'
+        condition: succeededOrFailed()
+        inputs:
+          PathtoPublish: 'QA_Automation/Reports'
+          ArtifactName: '${{ parameters.Job_Name }}_Report'
+          publishLocation: 'Container'

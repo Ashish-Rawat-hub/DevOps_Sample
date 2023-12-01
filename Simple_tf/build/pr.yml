@@ -1,0 +1,43 @@
+pr:
+- main
+- dev-*
+trigger: none
+
+pool:
+  vmImage: windows-latest
+
+steps:
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore Nuget packages'
+    inputs:
+      command: 'restore'
+      feedsToUse: 'config'
+      nugetConfigPath: 'NuGet.Config'
+    env:
+      MY_API_KEY: $(TELERIK_NUGET_KEY)
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build all projects'
+    inputs:
+      command: 'build'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run Service unit tests'
+    inputs:
+      command: test
+      projects: 'FDB.BST.PDCentral.Services.Tests/FDB.BST.PDCentral.Services.Tests.csproj'
+      arguments: '--configuration "Release" --collect "Code coverage"'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run API unit tests'
+    inputs:
+      command: test
+      projects: 'FDB.BST.PDCentral.Api.Tests/FDB.BST.PDCentral.Api.Tests.csproj'
+      arguments: '--configuration "Release" --collect "Code coverage"'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run UI unit tests'
+    inputs:
+      command: test
+      projects: 'FDB.BST.PDCentral.UI.Tests/FDB.BST.PDCentral.UI.Tests.csproj'
+      arguments: '--configuration "Release" --collect "Code coverage"'

@@ -1,0 +1,31 @@
+trigger: 
+  batch: true
+  branches:
+    include:
+      - develop
+
+pr: none # will disable PR builds (but not CI builds)
+
+parameters:
+  - name: Environment
+    type: string
+    displayName: 'Environment Name'
+    default: 'Dev'
+    values:
+      - 'Dev'
+      - 'Test'
+      - 'Stage'
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:  
+  - group: 'Pdcentral-${{ parameters.Environment }}-Infrastructure-Configuration'
+
+extends:
+  template: template.yml
+  parameters:
+    azureSubscription: $(Service_Connection)
+    webAppName: $(webapp-ui)
+    apiAppName: $(webapp-api)
+    environment: ${{ parameters.Environment }}

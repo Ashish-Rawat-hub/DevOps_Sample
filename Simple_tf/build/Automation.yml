@@ -1,0 +1,89 @@
+##QA Automation Pipeline
+
+trigger: none
+pr: none
+# schedules:
+# - cron: '30 0 * * *'
+#   displayName: QA Automation Daily Schedule
+#   branches:
+#     include:
+#     - main
+#     - dev-*
+#   always: true
+  
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  - group: 'Pdcentral-Dev-Infrastructure-Configuration'
+
+stages:
+  - stage: Automation_Test
+    displayName: 'Automation Test'
+    jobs:
+     
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterForFileSetUpPage'
+          Test_Suite: 'TestCaseOfFilterForFileSetUpPage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterForProductExtractPage'
+          Test_Suite: 'TestCaseOfFilterForProductExtractPage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterForSchedulePage'
+          Test_Suite: 'TestCaseOfFilterForSchedulePage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterForShipmentPage'
+          Test_Suite: 'TestCaseOfFilterForShipmentPage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterForUserPage'
+          Test_Suite: 'TestCaseOfFilterForUserPage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseShipments_Screen'
+          Test_Suite: 'TestCaseShipments_Screen.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseSchedule'
+          Test_Suite: 'TestCaseSchedule.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseUsers'
+          Test_Suite: 'TestCaseUsers.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseOfFilterTestCaseForSubscriptionPage'
+          Test_Suite: 'TestCaseOfFilterTestCaseForSubscriptionPage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseProductspage'
+          Test_Suite: 'TestCaseProductspage.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseBuild_Files_Screen'
+          Test_Suite: 'TestCaseBuild_Files_Screen.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseVendorCompatibility'
+          Test_Suite: 'TestCaseVendorCompatibility.xml'
+
+      - template: Automation_template.yml
+        parameters:
+          Job_Name: 'TestCaseSubscription'
+          Test_Suite: 'TestCaseSubscription.xml'

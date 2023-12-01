@@ -1,0 +1,143 @@
+parameters:
+  - name: webAppName
+    type: string
+    default: ""
+  - name: apiAppName
+    type: string
+    default: ""
+  - name: azureSubscription
+    type: string
+    default: ""
+  - name: environment
+    type: string
+    default: ""
+
+stages:
+  - stage: ${{ parameters.environment }}_Build
+    displayName: '${{ parameters.environment }} Build'
+    jobs:
+      - job: ${{ parameters.environment }}_Build
+        displayName: 'Building for ${{ parameters.environment }} Environment'
+        steps:
+          - task: replacetokens@3
+            inputs:
+              targetFiles: '**/appsettings.json'
+              encoding: 'auto'
+              writeBOM: true
+              actionOnMissing: 'warn'
+              keepToken: true
+              actionOnNoFiles: 'continue'
+              enableTransforms: false
+              tokenPrefix: '{{'
+              tokenSuffix: '}}'
+              enableRecursion: false
+              useLegacyPattern: false
+              enableTelemetry: true
+              
+          - task: DotNetCoreCLI@2
+            displayName: 'Restore Nuget packages'
+            inputs:
+              command: 'restore'
+              feedsToUse: 'config'
+              nugetConfigPath: 'NuGet.Config'
+            env:
+              MY_API_KEY: $(TELERIK_NUGET_KEY)
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Build all projects'
+            inputs:
+              command: 'build'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Run Service unit tests'
+            inputs:
+              command: test
+              projects: 'FDB.BST.PDCentral.Services.Tests/FDB.BST.PDCentral.Services.Tests.csproj'
+              arguments: '--configuration "Release" --collect "Code coverage"'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Run API unit tests'
+            inputs:
+              command: test
+              projects: 'FDB.BST.PDCentral.Api.Tests/FDB.BST.PDCentral.Api.Tests.csproj'
+              arguments: '--configuration "Release" --collect "Code coverage"'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Run UI unit tests'
+            inputs:
+              command: test
+              projects: 'FDB.BST.PDCentral.UI.Tests/FDB.BST.PDCentral.UI.Tests.csproj'
+              arguments: '--configuration "Release" --collect "Code coverage"'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Publish web API project'
+            inputs:
+              command: 'publish'
+              publishWebProjects: false
+              projects: 'FDB.BST.PDCentral.Api/FDB.BST.PDCentral.Api.csproj'
+              arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)/API'
+              modifyOutputPath: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish API output as artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/API'
+              ArtifactName: 'API'
+              publishLocation: 'Container'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Publish web UI project'
+            inputs:
+              command: 'publish'
+              publishWebProjects: false
+              projects: 'FDB.BST.PDCentral.UI/FDB.BST.PDCentral.UI.csproj'
+              arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)/UI'
+              modifyOutputPath: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish UI output as artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/UI'
+              ArtifactName: 'UI'
+              publishLocation: 'Container'
+
+  - stage: ${{ parameters.environment }}_Deployment
+    displayName: '${{ parameters.environment }} Deployment'
+    jobs:
+      - job: ${{ parameters.environment }}_Deployment
+        displayName: 'Deployment to ${{ parameters.environment }} Environment'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+        
+          - task: DownloadBuildArtifacts@1
+            displayName: 'Download API Build Artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'API'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: DownloadBuildArtifacts@1
+            displayName: 'Download UI Build Artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'UI'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy UI to azure'
+            inputs:
+              appType: webApp
+              azureSubscription: '${{ parameters.azureSubscription }}'
+              appName: '${{ parameters.webAppName }}'
+              package: $(System.ArtifactsDirectory)/UI/*.zip
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy API to azure'
+            inputs:
+              appType: webApp
+              azureSubscription: '${{ parameters.azureSubscription }}'
+              appName: '${{ parameters.apiAppName }}'
+              package: $(System.ArtifactsDirectory)/API/*.zip

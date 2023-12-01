@@ -1,0 +1,209 @@
+trigger:
+- none
+pr: none
+
+parameters:
+  - name: subscription
+    type: string
+    displayName: 'Environment Name'
+    default: 'Dev'
+    values:
+      - Dev
+      - Test
+      - Stage
+  - name: terraformaction
+    type: string
+    displayName: Terraform
+    default: 'Create'
+    values:
+      - Create
+      - Destroy
+
+variables:
+  - name: 'envname'
+    ${{ if eq( parameters['subscription'], 'Dev') }}:
+      value: "Dev"
+    ${{ if eq( parameters['subscription'], 'Test' ) }}:
+      value: "Test"
+    ${{ if eq( parameters['subscription'], 'Stage') }}:
+      value: "Stage"
+
+  - name: 'library_variable_id'
+    ${{ if eq( parameters['subscription'], 'Dev') }}:
+      value: 1
+    ${{ if eq( parameters['subscription'], 'Test' ) }}:
+      value: 2
+    ${{ if eq( parameters['subscription'], 'Stage') }}:
+      value: 3
+
+##Adds destroy flag to plan if selected action is Destroy
+  - name: 'Plan'
+    ${{ if eq( parameters['terraformaction'], 'Create')}}:
+      value: ""
+    ${{ if eq( parameters['terraformaction'], 'Destroy')}}:
+      value: "-destroy"  
+
+  - name: 'OverrideFile'
+    value: Terraform/Environments/$(tfvarsfile)
+  - name: 'terraform_repo'
+    value: 'fdb_bst_newton'
+  - group: 'Pdcentral-${{ parameters.subscription }}-Infrastructure-Configuration'
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: TerraformPlan
+    displayName: 'Terraform Plan'
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Terraform Plan'
+        steps:
+          - checkout: self
+
+          - task: TerraformInstaller@0
+            displayName: 'Installing Terraform'
+            inputs:
+              terraformVersion: '1.5.7'
+          
+          - script: |
+              cp $(Build.SourcesDirectory)/${{ variables.OverrideFile }} $(Build.SourcesDirectory)/Terraform
+            displayName: 'Copy Tfvars File'    
+
+          - task: replacetokens@3
+            inputs:
+              rootDirectory: 'Terraform'
+              targetFiles: '**/*.*'
+              encoding: 'auto'
+              writeBOM: true
+              actionOnMissing: 'warn'
+              keepToken: false
+              actionOnNoFiles: 'continue'
+              enableTransforms: false
+              tokenPrefix: '{{'
+              tokenSuffix: '}}'
+              enableRecursion: false
+              useLegacyPattern: false
+              enableTelemetry: true
+
+          - script: |
+              cat $(Build.SourcesDirectory)/$(OverrideFile)
+            displayName: 'Cat Tfvars File'
+
+          - task: TerraformTaskV3@3
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: 'Terraform'
+              backendServiceArm: $(Service_Connection)
+              backendAzureRmResourceGroupName: $(Terraform_state_file_resource_group)
+              backendAzureRmStorageAccountName: $(Terraform_state_file_storage_account)
+              backendAzureRmContainerName: $(Terraform_state_file_container)
+              backendAzureRmKey: $(Terraform_state_file)
+      
+          - task: TerraformTaskV3@3
+            displayName: 'Terraform ${{ parameters.terraformaction }} Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(Build.SourcesDirectory)/Terraform'
+              commandOptions: $(Plan)
+              environmentServiceNameAzureRM: $(Service_Connection)
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Registry Repo'
+            inputs:
+              rootFolderOrFile: '$(Build.SourcesDirectory)/Terraform'
+              includeRootFolder: false
+              archiveType: "tar"
+              tarCompression: "gz"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).tgz"
+              replaceExistingArchive: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Registry Repo'
+            inputs:
+              PathtoPublish: "$(Build.ArtifactStagingDirectory)"
+              ArtifactName: "$(Build.BuildId)-tfplan"
+              publishLocation: "Container"
+
+  - stage: 'Terraform${{ parameters.terraformaction }}'
+    dependsOn: TerraformPlan
+    displayName: 'Terraform ${{ parameters.terraformaction }}'
+    jobs:
+      - deployment: Terraform_${{ parameters.terraformaction }}
+        timeoutInMinutes: 30
+        environment: $(environment)
+        displayName: Terraform ${{ parameters.terraformaction }}
+        strategy:
+         runOnce:
+           deploy:
+            steps:
+            - checkout: none
+
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download Registry Repo'
+              inputs:
+                artifactName: "$(Build.BuildId)-tfplan"
+
+            - task: ExtractFiles@1
+              displayName: 'Extract Registry Repo'
+              inputs:
+                archiveFilePatterns: "$(System.ArtifactsDirectory)/$(Build.BuildId)-tfplan/$(Build.BuildId).tgz"
+                destinationFolder: "$(System.DefaultWorkingDirectory)/"
+
+            - script: |
+                cat $(System.DefaultWorkingDirectory)/$(tfvarsfile)
+              displayName: 'Cat Tfvars File'
+
+            - task: TerraformInstaller@0
+              displayName: 'Installing Terraform'
+              inputs:
+                terraformVersion: '1.5.7'
+        
+            - task: TerraformTaskV3@3
+              displayName: 'Terraform Init'
+              inputs:
+                provider: 'azurerm'
+                command: 'init'
+                workingDirectory: '$(System.DefaultWorkingDirectory)'
+                backendServiceArm: $(Service_Connection)
+                backendAzureRmResourceGroupName: $(Terraform_state_file_resource_group)
+                backendAzureRmStorageAccountName: $(Terraform_state_file_storage_account)
+                backendAzureRmContainerName: $(Terraform_state_file_container)
+                backendAzureRmKey: $(Terraform_state_file)
+          
+            - task: TerraformTaskV3@3
+              condition: and(succeeded(), eq('${{ parameters.TerraformAction}}', 'Create'))
+              displayName: 'Terraform Apply'
+              inputs:
+                provider: 'azurerm'
+                command: 'apply'
+                workingDirectory: '$(System.DefaultWorkingDirectory)'
+                environmentServiceNameAzureRM: $(Service_Connection)
+
+            - powershell: |
+                  ##Outputting UI App Insight connection string to a file tf_output.txt
+                  terraform output App_Insight_Connection_String_UI > $(Build.SourcesDirectory)/tf_output.txt
+                  
+                  $App_Insight_Connection_String_UI = Get-Content $(Build.SourcesDirectory)/tf_output.txt
+                  
+                  Write-Host "UI App Insight connection string $($App_Insight_Connection_String_UI)"
+                  Write-Host "Updating App Insight connection string on Pdcentral-${{ variables.envname }}-Infrastructure-Configuration library group"
+                  
+                  ##Updating the library variable
+                  az pipelines variable-group variable update --organization https://dev.azure.com/FDBBusinessSystems --project fdb_bst_newton --group-id ${{ variables.library_variable_id }} --name App_Insight_Connection_String_UI --value $App_Insight_Connection_String_UI --secret false --output yaml
+              env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+              displayName: "Updating UI App Insight connection string on ${{ variables.envname }} library group"
+              condition: and(succeeded(), eq('${{ parameters.TerraformAction}}', 'Create'))
+
+            - task: TerraformTaskV3@3
+              condition: and(succeeded(), eq('${{ parameters.TerraformAction}}', 'Destroy'))
+              displayName: 'Terraform Destroy'
+              inputs:
+                provider: 'azurerm'
+                command: 'destroy'
+                workingDirectory: '$(System.DefaultWorkingDirectory)'
+                environmentServiceNameAzureRM: $(Service_Connection)
