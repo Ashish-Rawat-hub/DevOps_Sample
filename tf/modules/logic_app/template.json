@@ -1,0 +1,191 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflow_name": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "location": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "env": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "function_id": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "frequency": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "interval": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "keyvault_function_name": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "sqlserver_function_name": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "delay1_frequency": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "delay2_frequency": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "delay1_unit": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "delay2_unit": {
+            "defaultValue": "",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflow_name')]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "frequency": {
+                            "type": "String"
+                        },
+                        "interval": {
+                            "type": "String"
+                        },
+                        "keyvault_function_name": {
+                            "type": "String"
+                        },
+                        "sqlserver_function_name": {
+                            "type": "String"
+                        },
+                        "delay1_frequency": {
+                            "type": "String"
+                        },
+                        "delay2_frequency": {
+                            "type": "String"
+                        },
+                        "delay1_unit": {
+                            "type": "String"
+                        },
+                        "delay2_unit": {
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "[parameters('frequency')]",
+                                "interval": "[parameters('interval')]"
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "[parameters('frequency')]",
+                                "interval": "[parameters('interval')]"
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "KeyVault_Delay": {
+                            "runAfter": {},
+                            "type": "Wait",
+                            "inputs": {
+                                "interval": {
+                                    "count": "[parameters('delay1_frequency')]",
+                                    "unit": "[parameters('delay1_unit')]"
+                                }
+                            }
+                        },
+                        "SqlServer_Delay": {
+                            "runAfter": {},
+                            "type": "Wait",
+                            "inputs": {
+                                "interval": {
+                                    "count": "[parameters('delay2_frequency')]",
+                                    "unit": "[parameters('delay2_unit')]"
+                                }
+                            }
+                        },
+                        "[parameters('keyvault_function_name')]": {
+                            "runAfter": {
+                                "KeyVault_Delay": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Function",
+                            "inputs": {
+                                "function": {
+                                    "id": "[concat(parameters('function_id'), concat('/functions/', parameters('keyvault_function_name')))]"
+                                }
+                            }
+                        },
+                        "[parameters('sqlserver_function_name')]": {
+                            "runAfter": {
+                                "SqlServer_Delay": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Function",
+                            "inputs": {
+                                "function": {
+                                    "id": "[concat(parameters('function_id'), concat('/functions/', parameters('sqlserver_function_name')))]"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": {
+                    "frequency": {
+                        "type": "String",
+                        "value": "[parameters('frequency')]"
+                    },
+                    "interval": {
+                        "type": "String",
+                        "value": "[parameters('interval')]"
+                    },
+                    "keyvault_function_name": {
+                        "type": "String",
+                        "value": "[parameters('keyvault_function_name')]"
+                    },
+                    "sqlserver_function_name": {
+                        "type": "String",
+                        "value": "[parameters('sqlserver_function_name')]"
+                    },
+                    "delay1_frequency": {
+                        "type": "String",
+                        "value": "[parameters('delay1_frequency')]"
+                    },
+                    "delay2_frequency": {
+                        "type": "String",
+                        "value": "[parameters('delay2_frequency')]"
+                    },
+                    "delay1_unit": {
+                        "type": "String",
+                        "value": "[parameters('delay1_unit')]"
+                    },
+                    "delay2_unit": {
+                        "type": "String",
+                        "value": "[parameters('delay2_unit')]"
+                    }
+                }
+            }
+        }
+    ]
+}
