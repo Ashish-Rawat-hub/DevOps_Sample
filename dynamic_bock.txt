@@ -1,0 +1,35 @@
+Dynamic block optional
+
+If want to create a dynamic block which will only get created if there are variables inside the variable.
+Follow this:
+Main.tf
+dynamic "ingress" {
+ for_each = var.ingress != {} ? [var.ingress] : []
+ content {
+    allow_insecure_connections = lookup(ingress.value, "allow_insecure_connections", null)
+    external_enabled           = lookup(ingress.value, "external_enabled", null)
+    target_port                = lookup(ingress.value, "target_port", null)
+    transport                 = lookup(ingress.value, "transport", null)
+
+    traffic_weight {
+      latest_revision = lookup(ingress.value, "latest_revision", null)
+      percentage      = lookup(ingress.value, "percentage", null)
+    }
+ }
+}
+
+Variable.tf
+variable "ingress" {
+  description = "Ingress block for the container app"
+  default = {}
+}
+
+tfvars
+    container_app_ingress_ui    = {
+        allow_insecure_connections = "true"
+        external_enabled           = "true"
+        target_port                = 80
+        transport                  = "auto"
+        latest_revision            = "true"
+        percentage                 = 100
+      }
